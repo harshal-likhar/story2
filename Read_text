@@ -1,0 +1,47 @@
+         data: lt_line TYPE STANDARD TABLE OF tline,
+                lv_meld_text TYPE string,
+                lv_line TYPE string,
+                lv_TDNAME TYPE THEAD-TDNAME,
+                len TYPE i.
+          lv_TDNAME = viqmel-qmnum.
+          CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+              ID                            = 'LTXT'
+              LANGUAGE                      = sy-langu
+              NAME                          = lv_TDNAME
+              OBJECT                        = 'QMEL'
+            TABLES
+              LINES                         = lt_line
+           EXCEPTIONS
+             ID                            = 1
+             LANGUAGE                      = 2
+             NAME                          = 3
+             NOT_FOUND                     = 4
+             OBJECT                        = 5
+             REFERENCE_CHECK               = 6
+             WRONG_ACCESS_TO_ARCHIVE       = 7
+             OTHERS                        = 8
+                    .
+          IF SY-SUBRC <> 0.
+* Implement suitable error handling here
+          ENDIF.
+          delete lt_line where tdline cp '*.*.*:*:*(*)*'.
+          LOOP AT lt_line ASSIGNING FIELD-SYMBOL(<ls_line>).
+*            IF <ls_line>-tdline ca '.:()'.
+*            delete lt_line from <ls_line>.
+*            else.
+            WHILE <ls_line>-tdline ne space.
+              len = sy-index.
+              IF <ls_line>-tdline(1) = '*'.
+                shift <ls_line>-tdline.
+                shift <ls_line>-tdline .
+                exit.
+                else.
+                  exit.
+              ENDIF.
+            ENDWHILE.
+            lv_line = <ls_line>-tdline.
+*          CONCATENATE lv_meld_text <ls_line>-tdline into lv_meld_text SEPARATED BY space.
+          lv_meld_text = |{ lv_meld_text } { lv_line }|.
+*          endif.
+          ENDLOOP.
