@@ -1,0 +1,23 @@
+**Technischer Platz
+          TYPES: BEGIN OF ty_tplnr,
+                  tplnr TYPE tplnr,
+                  fltyp TYPE fltyp,
+            tplma TYPE tplnr,
+            end of ty_tplnr.
+          data: lt_iflot TYPE STANDARD TABLE OF ty_tplnr.
+          lt_iflot = value #( ( tplnr = viqmel-tplnr  ) ).
+          do.
+          select tplnr,fltyp,tplma from iflot
+            INTO TABLE @data(lt_iflot_db)
+            FOR ALL ENTRIES IN @lt_iflot
+            where tplnr = @lt_iflot-tplnr.
+            IF sy-subrc = 0.
+              lt_iflot = CORRESPONDING #( lt_iflot_db MAPPING tplnr = tplma tplma = tplnr ).
+              READ TABLE lt_iflot_db into data(ls_iflot) with KEY fltyp = 'G'.
+              IF sy-subrc = 0.
+                select SINGLE pltxt from iflotx into @data(ls_pltxt) where  tplnr = @ls_iflot-TPLNR
+                   and SPRAS = @sy-langu.
+                   exit.
+              endif.
+            ENDIF.
+           enddo.
