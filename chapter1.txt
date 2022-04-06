@@ -1,2 +1,205 @@
-this is a story1.
-this is a perfect story
+  METHOD detail_tplnr_read.
+**TRY.
+*CALL METHOD SUPER->DETAIL_TPLNR_READ
+*  EXPORTING
+*    IO_RESPONSE =
+*    IO_REQUEST  =
+*    .
+** CATCH /iwbep/cx_gateway .
+**ENDTRY.
+
+    TYPES: BEGIN OF my_entityset,
+             city      TYPE string,
+             postcode  TYPE string,
+             housenum  TYPE string,
+             street    TYPE string,
+             tplnr     TYPE string,
+             pltxt     TYPE string,
+             tplkz     TYPE string,
+             fltyp     TYPE string,
+             fltyptx   TYPE string,
+             iwerk     TYPE string,
+             iwerktx   TYPE string,
+             ingrp     TYPE string,
+             gsber     TYPE string,
+             gsbertx   TYPE string,
+             kostl     TYPE string,
+             kostltx   TYPE string,
+             bukrs     TYPE string,
+             vkorg     TYPE string,
+             vtweg     TYPE string,
+             spart     TYPE string,
+             image     TYPE string,
+             mimetype  TYPE string,
+             error_txt TYPE string,
+           END OF my_entityset.
+
+    "Communication Data
+    DATA: ls_entityset TYPE my_entityset,
+          ls_key_data  TYPE my_entityset,
+          ls_done      TYPE /iwbep/if_v4_requ_basic_read=>ty_s_todo_process_list.
+
+    "Processing Data
+    DATA: lv_tplnr        TYPE tplnr,
+          ls_general      TYPE bapi_itob,
+          ls_specific     TYPE bapi_itob_fl_only,
+          ls_return       TYPE bapiret2,
+          lv_iloan        TYPE iloan,
+          ls_iloa         TYPE iloa,
+          lv_content      TYPE string,
+          lt_documentlist TYPE /afm/dokumentlist_tt,
+          ls_documentlist LIKE LINE OF lt_documentlist,
+          ls_adrc         TYPE adrc.
+
+**********************************************************************
+* Extract Key:
+**********************************************************************
+    CLEAR: ls_key_data.
+    CALL METHOD io_request->get_key_data
+      IMPORTING
+        es_key_data = ls_key_data.
+
+
+**********************************************************************
+* Get Data
+**********************************************************************
+
+    lv_tplnr = ls_key_data-tplnr.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = lv_tplnr
+      IMPORTING
+        output = lv_tplnr.
+
+
+*****
+* General Data
+*****
+    "Basis for other Data
+    CLEAR: ls_general, ls_specific, ls_return.
+    CALL FUNCTION 'BAPI_FUNCLOC_GETDETAIL'
+      EXPORTING
+        functlocation     = lv_tplnr
+      IMPORTING
+        data_general_exp  = ls_general
+        data_specific_exp = ls_specific
+        return            = ls_return.
+
+    IF ls_return IS NOT INITIAL.
+      ls_entityset-error_txt = ls_return-message.
+    ELSE.
+
+      "IFLOT Data
+      SELECT SINGLE * FROM iflot INTO CORRESPONDING FIELDS OF ls_entityset WHERE tplnr = lv_tplnr.
+
+      "Addresss Data
+      SELECT SINGLE iloan FROM iflot INTO lv_iloan WHERE tplnr = lv_tplnr.
+      SELECT SINGLE * FROM adrc AS a
+        JOIN iloa AS i
+        ON i~adrnr = a~addrnumber
+        INTO CORRESPONDING FIELDS OF ls_adrc
+        WHERE iloan = lv_iloan.
+
+      ls_entityset-city     = ls_adrc-city1.
+      ls_entityset-postcode = ls_adrc-post_code1.
+      ls_entityset-street   = ls_adrc-street.
+      ls_entityset-housenum = ls_adrc-house_num1.
+
+      IF lv_iloan IS NOT INITIAL.
+        SELECT SINGLE * FROM iloa INTO ls_iloa WHERE iloan = lv_iloan.
+
+        ls_entityset-gsber = ls_iloa-gsber.
+        ls_entityset-kostl = ls_iloa-kostl.
+        ls_entityset-bukrs = ls_iloa-bukrs.
+        ls_entityset-vkorg = ls_iloa-vkorg.
+        ls_entityset-vtweg = ls_iloa-vtweg.
+        ls_entityset-spart = ls_iloa-spart.
+      ENDIF.
+
+*****
+* Texts
+*****
+* TPLNR
+      SELECT SINGLE pltxt FROM iflotx INTO ls_entityset-pltxt WHERE tplnr = lv_tplnr AND spras = sy-langu.
+
+      " Type Text
+      SELECT SINGLE typtx FROM t370f_t INTO ls_entityset-fltyptx
+             WHERE spras = sy-langu
+             AND   fltyp = ls_specific-category.
+
+      IF ls_iloa IS NOT INITIAL.
+        "Geschäftsbereich
+        IF ls_entityset-gsber IS NOT INITIAL.
+          SELECT SINGLE gtext FROM tgsbt INTO ls_entityset-gsbertx
+                 WHERE spras = sy-langu
+                 AND   gsber = ls_entityset-gsber.
+        ENDIF.
+
+        "Kostenstelle
+        IF ls_entityset-kostl IS NOT INITIAL.
+          SELECT SINGLE ktext FROM cskt INTO ls_entityset-kostltx
+                 WHERE spras =  sy-langu
+                 AND   kokrs =  ls_iloa-kokrs
+                 AND   kostl =  ls_entityset-kostl
+                 AND   datbi >= sy-datum.
+        ENDIF.
+
+      ENDIF.
+
+      " Planungswerk
+      SELECT SINGLE name1 FROM t001w INTO ls_entityset-iwerktx
+             WHERE werks = ls_entityset-iwerk.
+
+*****
+* Object Image
+*****
+      REFRESH: lt_documentlist.
+      CALL FUNCTION '/AFM/GETDOKUMENTE'
+        EXPORTING
+          dokart       = 'IMG'
+          objkey       = lv_tplnr
+        IMPORTING
+          dokumentlist = lt_documentlist
+          return       = ls_return.
+
+      READ TABLE lt_documentlist INTO ls_documentlist INDEX 1.
+
+      IF ls_documentlist IS NOT INITIAL.
+
+        CALL FUNCTION '/AFM/SHOWDOKUMENTE'
+          EXPORTING
+            stor_cat = ls_documentlist-stor_cat
+            doc_id   = ls_documentlist-doc_id
+            crep_cat = ls_documentlist-crep_cat
+          IMPORTING
+            content  = lv_content.
+
+        ls_entityset-image    = lv_content.
+        ls_entityset-mimetype = ls_documentlist-mimetype.
+
+      ENDIF.
+
+    ENDIF.
+
+**********************************************************************
+* Send Data back:
+**********************************************************************
+    TRY .
+        CALL METHOD io_response->set_busi_data
+          EXPORTING
+            is_busi_data = ls_entityset.
+
+        ls_done-select   = 'X'. "Select is done
+        ls_done-key_data = 'X'. "Processing of the key value is done
+        CALL METHOD io_response->set_is_done
+          EXPORTING
+            is_todo_list = ls_done.
+
+      CATCH /iwbep/cx_gateway.
+
+        "Fehler
+
+    ENDTRY.
+
+  ENDMETHOD.
