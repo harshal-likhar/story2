@@ -1,6 +1,66 @@
-  METHOD list_documents_read_list.
+  METHOD list_tplnrset_read.
 **TRY.
-*CALL METHOD SUPER->LIST_DOCUMENTS_READ_LIST
+*CALL METHOD SUPER->LIST_TPLNRSET_READ
+*  EXPORTING
+*    IO_RESPONSE =
+*    IO_REQUEST  =
+*    .
+** CATCH /iwbep/cx_gateway .
+**ENDTRY.
+
+    TYPES: BEGIN OF my_entityset,
+             tplnr  TYPE string,
+             pltxt  TYPE string,
+             status TYPE string,
+             tplma  TYPE string,
+           END OF my_entityset,
+           BEGIN OF my_key_data,
+             name  TYPE c LENGTH 30,
+             value TYPE string,
+           END OF my_key_data.
+
+    DATA: lt_test      TYPE TABLE OF my_entityset,
+          ls_entityset TYPE my_entityset,
+          lt_key_data  TYPE TABLE OF my_key_data,
+          ls_key_data  TYPE my_key_data,
+          lv_tplnr     TYPE tplnr,
+          ls_done      TYPE /IWBEP/IF_V4_REQU_BASIC_READ=>TY_S_TODO_PROCESS_LIST.
+
+
+    REFRESH: lt_key_data.
+    CALL METHOD io_request->get_key_data
+      IMPORTING
+        es_key_data = lt_key_data.
+
+    CLEAR: ls_key_data, ls_entityset.
+    READ TABLE lt_key_data INTO ls_key_data WITH KEY name = 'Tplnr'.
+    IF sy-subrc = 0.
+      lv_tplnr = ls_key_data-value.
+      SELECT SINGLE * FROM iflotx INTO CORRESPONDING FIELDS OF ls_entityset WHERE tplnr = lv_tplnr AND spras = sy-langu.
+    ENDIF.
+
+    TRY .
+        CALL METHOD io_response->set_busi_data
+          EXPORTING
+            is_busi_data = lt_test." ls_entityset.
+
+        ls_done-select = 'X'.
+        CALL METHOD io_response->set_is_done
+          EXPORTING
+            is_todo_list = ls_done.
+
+      CATCH /iwbep/cx_gateway.
+
+        "Fehler
+
+    ENDTRY.
+  ENDMETHOD.
+  
+  
+  
+    METHOD list_tplnrset_read_list.
+**TRY.
+*CALL METHOD SUPER->LIST_TPLNRSET_READ_LIST
 *  EXPORTING
 *    IO_REQUEST  =
 *    IO_RESPONSE =
@@ -8,261 +68,57 @@
 ** CATCH /iwbep/cx_gateway .
 **ENDTRY.
 
-
-    DATA: lt_documentlist TYPE /afm/dokumentlist_tt,
-          ls_documentlist TYPE /afm/dokumentlist,
-          lt_key_data     TYPE /afm/dokumentlist_tt,
-          ls_key_data     TYPE /afm/dokumentlist,
-          ls_done         TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list,
-          ro_filter       TYPE REF TO /iwbep/if_v4_filter_node,
-          lo_child_node   TYPE REF TO /iwbep/if_v4_filter_node,
-          lo_child_node2  TYPE REF TO /iwbep/if_v4_filter_node,
-          lv_type         TYPE string,
-          lv_objkey       TYPE char30,
-          lv_objtype      TYPE char1,
-          lv_count        TYPE i.
-
-    DATA: lt_return        TYPE bapiret2,
-          lv_tplnr         TYPE tplnr,
-          lv_equnr         TYPE equnr,
-          lv_send_children TYPE xfeld,
-          lv_children      TYPE c LENGTH 10.
-
     TYPES: BEGIN OF my_entityset,
-             dokar            TYPE string,
-             doknr            TYPE string,
-             dokvr            TYPE string,
-             adatum           TYPE string,
-             item_number      TYPE string,
-             item_description TYPE string,
-             tplnr            TYPE string,
-             equnr            TYPE string,
-             pmqmel           TYPE string,
-             dktxt            TYPE string,
-             mimetype         TYPE string,
-             stor_cat         TYPE string,
-             doc_id           TYPE string,
-             description      TYPE string,
-             crep_cat         TYPE string,
-             doc_name         TYPE string,
-             sendchildren     TYPE string,
-             ischild          TYPE string,
+             tplnr  TYPE string,
+             pltxt  TYPE string,
+             status TYPE string,
+             tplma  TYPE string,
            END OF my_entityset.
 
-    DATA: lt_entityset    TYPE TABLE OF my_entityset,
-          ls_entityset    TYPE my_entityset,
-          lv_top          TYPE i,
-          lt_path         TYPE /iwbep/if_v4_runtime_types=>ty_t_property_path,
-          ls_path         TYPE /iwbep/if_v4_runtime_types=>ty_property_path,
-          lt_range        TYPE RANGE OF string,
-          ls_range        LIKE LINE OF lt_range,
-          lv_dokar_filter TYPE dokar,
-          lv_dktxt_filter TYPE dktxt_uc.
 
-**********************************************************************
-* Extract EQUNR and / or TPLNR
-**********************************************************************
-*****    CALL METHOD io_request->get_filter_tree
-*****      RECEIVING
-*****        ro_filter_root_node = ro_filter.
-*****
-*****    IF ro_filter IS BOUND.
-*****      "Get first child.
-*****      lo_child_node = ro_filter->get_child( 1 ).
-*****
-*****      "Get Value of first parameter (Child if only one filter Parameter, child2 if there are 2)
-*****      IF lo_child_node IS BOUND.
-*****        lo_child_node2 = lo_child_node->get_child( 1 ).
-*****        IF lo_child_node2 IS BOUND.
-*****          "Two Filter Parameter
-*****          lv_type = lo_child_node2->get_value( ). "Welches Feld?
-*****
-*****          "Get the objekt
-*****          lo_child_node2 = lo_child_node->get_child( 2 ).
-*****          IF lo_child_node2 IS BOUND.
-*****            lv_objkey = lo_child_node2->get_value( ). "Welcher Wert?
-*****          ENDIF.
-*****
-*****          "Should I ask for the children?
-*****          lo_child_node = ro_filter->get_child( 2 ).
-*****          lo_child_node2 = lo_child_node->get_child( 2 ).
-*****          IF lo_child_node2 IS BOUND.
-*****            lv_children =  lo_child_node2->get_value( ). "Welcher Wert?
-*****            TRANSLATE lv_children TO UPPER CASE.
-*****            IF lv_children = 'FALSE'.
-*****              CLEAR: lv_send_children .
-*****            ELSEIF lv_children = 'TRUE' OR lv_children = 'X'.
-*****              lv_send_children = 'X'.
-*****            ENDIF.
-*****          ENDIF.
-*****
-*****        ELSE.
-*****          "Only one Filter Parameter
-*****          lv_type = lo_child_node->get_value( ).
-*****
-*****          "Get the objekt
-*****          lo_child_node = ro_filter->get_child( 2 ).
-*****          IF lo_child_node IS BOUND.
-*****            lv_objkey = lo_child_node->get_value( ).
-*****          ENDIF.
-*****
-*****        ENDIF.
-*****      ENDIF.
-*****
-*****      CLEAR: lv_objtype.
-*****
-*****      CASE lv_type.
-*****        WHEN 'TPLNR'.
-*****          "Technischer Platz
-*****          lv_objtype = 'T'.
-*****        WHEN 'EQUNR'.
-*****          "Equipment
-*****          lv_objtype = 'E'.
-*****        WHEN 'PMQMEL'.
-*****          "Meldung
-*****          lv_objtype = 'M'.
-*****          CLEAR: lv_send_children. "Kinder für Meldungen nicht vorgesehen
-*****      ENDCASE.
-*****
-*****      CHECK lv_objtype IS NOT INITIAL.
-*****
-*****    ENDIF.
+    DATA: ls_entityset TYPE my_entityset,
+          et_entityset TYPE TABLE OF my_entityset,
+          ls_done      TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list,
+          lv_demo      TYPE xfeld,
+          lv_where     TYPE /afm/cafm_demo-funloc_list_where.
 
+    "Für Demos:
+    CLEAR: lv_demo, lv_where.
+    SELECT SINGLE demo_active funloc_list_where FROM /afm/cafm_demo INTO ( lv_demo, lv_where ).
 
-
-    DATA: ls_todo TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list.
-    CALL METHOD io_request->get_todos
-      IMPORTING
-        es_todo_list = ls_todo.
-
-    CALL METHOD io_request->get_filter_props_with_ranges
-      IMPORTING
-        et_property_path = lt_path.
-
-    LOOP AT lt_path INTO ls_path.
-
-      CALL METHOD io_request->get_filter_ranges_for_prop
-        EXPORTING
-          iv_property_path = ls_path
-        IMPORTING
-          et_range         = lt_range.
-
-      READ TABLE lt_range INTO ls_range INDEX 1.
-      IF sy-subrc = 0.
-        CASE ls_path.
-          WHEN 'SEND_CHILDREN'.
-            TRANSLATE ls_range-low TO UPPER CASE.
-            IF ls_range-low = 'TRUE' OR ls_range-low = 'X'.
-              lv_send_children = 'X'.
-            ELSE.
-              CLEAR: lv_send_children.
-            ENDIF.
-
-          WHEN 'TPLNR'.
-            "Technischer Platz
-            lv_objtype = 'T'.
-            lv_objkey = ls_range-low.
-          WHEN 'EQUNR'.
-            "Equipment
-            lv_objtype = 'E'.
-            lv_objkey = ls_range-low.
-          WHEN 'PMQMEL'.
-            "Meldung
-            lv_objtype = 'M'.
-            lv_objkey = ls_range-low.
-          WHEN 'DOKAR'.
-            lv_dokar_filter = ls_range-low.
-          WHEN 'DKTXT'.
-            lv_dktxt_filter = ls_range-low.
-        ENDCASE.
-      ENDIF.
-
-    ENDLOOP.
-
-    IF lv_objtype = 'M'. CLEAR: lv_send_children. ENDIF."Kinder für Meldungen nicht vorgesen
-
-**********************************************************************
-* Get Document Information
-**********************************************************************
-    IF lv_objtype IS NOT INITIAL.
-
-      CALL FUNCTION '/AFM/GETDOKUMENTE'
-        EXPORTING
-          dokart        = lv_dokar_filter
-          objkey        = lv_objkey  "TPLNR or EQUNR depending on objtype
-          objtype       = lv_objtype "T = TPLNR / E = EQUNR / M = PMQMEL
-*         EDATE         =
-          send_children = lv_send_children
-        IMPORTING
-          dokumentlist  = lt_documentlist
-          return        = lt_return.
-
+    IF lv_demo IS INITIAL
+      OR lv_where IS INITIAL.
+      SELECT  i~*, x~pltxt FROM iflot AS i
+        INNER JOIN iflotx AS x
+        ON i~tplnr = x~tplnr
+        INTO CORRESPONDING FIELDS OF TABLE @et_entityset
+        WHERE x~spras = @sy-langu.
+      "AND ( tplma LIKE '4000%' ) OR ( i~tplnr = '00001-GE003' OR i~tplnr = '000001-GE003' ).
     ELSE.
-      CALL FUNCTION '/AFM/GETDOKUMENTE2'
-        EXPORTING
-          dokart       = lv_dokar_filter
-          dktxt_uc     = lv_dktxt_filter
-        IMPORTING
-          dokumentlist = lt_documentlist
-          return       = lt_return.
+      "Beschaffe die Vorauswahl
+      SELECT  i~*, x~pltxt FROM iflot AS i
+        INNER JOIN iflotx AS x
+        ON i~tplnr = x~tplnr
+        INTO CORRESPONDING FIELDS OF TABLE @et_entityset
+        WHERE x~spras = @sy-langu
+        AND (lv_where).
     ENDIF.
 
-    IF lt_documentlist IS NOT INITIAL.
-      LOOP AT lt_documentlist INTO ls_documentlist.
-
-        MOVE-CORRESPONDING ls_documentlist TO ls_entityset.
-        "Das wird schon im Baustein gemacht
-*        CASE lv_type.
-*          WHEN 'TPLNR'.
-*            "Technischer Platz
-*            ls_entityset-item_number = ls_documentlist-tplnr.
-*            SELECT SINGLE pltxt FROM iflotx
-*              INTO ls_entityset-item_description WHERE tplnr = ls_entityset-item_number AND spras = sy-langu.
-*
-*          WHEN 'EQUNR'.
-*            "Equipment
-*            ls_entityset-item_number = ls_documentlist-equnr.
-*            SELECT SINGLE eqktx FROM eqkt
-*              INTO ls_entityset-item_description WHERE equnr = ls_entityset-item_number AND spras = sy-langu.
-*
-*          WHEN 'PMQMEL'.
-*            "Meldung
-*            ls_entityset-item_number = ls_documentlist-pmqmel.
-*            SELECT SINGLE qmtxt FROM qmel
-*              INTO ls_entityset-item_description WHERE qmnum = ls_entityset-item_number.
-*
-*        ENDCASE.
-
-        APPEND ls_entityset TO lt_entityset.
-      ENDLOOP.
-    ENDIF.
-
-**********************************************************************
-* Send Data back
-**********************************************************************
     TRY .
-        "Die eigentlichen Daten
         CALL METHOD io_response->set_busi_data
           EXPORTING
-            it_busi_data = lt_entityset.
+            it_busi_data = et_entityset.
 
-        IF ls_todo-return-count IS NOT INITIAL.
-          "Count
-          DESCRIBE TABLE lt_entityset LINES lv_count.
-          CALL METHOD io_response->set_count
-            EXPORTING
-              iv_count = lv_count.
-        ENDIF.
-
-        "DONE Struktur
-        IF ls_todo-process-filter IS NOT INITIAL. ls_done-filter = abap_true. ENDIF. "Filter
-        IF ls_todo-process-select IS NOT INITIAL. ls_done-select = abap_true. ENDIF. "select
+        ls_done-select = 'X'.
         CALL METHOD io_response->set_is_done
           EXPORTING
             is_todo_list = ls_done.
 
       CATCH /iwbep/cx_gateway.
 
+        BREAK klappstein.
+
     ENDTRY.
+
 
   ENDMETHOD.
