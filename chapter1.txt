@@ -1,66 +1,6 @@
-  METHOD list_tplnrset_read.
+  METHOD list_items_read_list.
 **TRY.
-*CALL METHOD SUPER->LIST_TPLNRSET_READ
-*  EXPORTING
-*    IO_RESPONSE =
-*    IO_REQUEST  =
-*    .
-** CATCH /iwbep/cx_gateway .
-**ENDTRY.
-
-    TYPES: BEGIN OF my_entityset,
-             tplnr  TYPE string,
-             pltxt  TYPE string,
-             status TYPE string,
-             tplma  TYPE string,
-           END OF my_entityset,
-           BEGIN OF my_key_data,
-             name  TYPE c LENGTH 30,
-             value TYPE string,
-           END OF my_key_data.
-
-    DATA: lt_test      TYPE TABLE OF my_entityset,
-          ls_entityset TYPE my_entityset,
-          lt_key_data  TYPE TABLE OF my_key_data,
-          ls_key_data  TYPE my_key_data,
-          lv_tplnr     TYPE tplnr,
-          ls_done      TYPE /IWBEP/IF_V4_REQU_BASIC_READ=>TY_S_TODO_PROCESS_LIST.
-
-
-    REFRESH: lt_key_data.
-    CALL METHOD io_request->get_key_data
-      IMPORTING
-        es_key_data = lt_key_data.
-
-    CLEAR: ls_key_data, ls_entityset.
-    READ TABLE lt_key_data INTO ls_key_data WITH KEY name = 'Tplnr'.
-    IF sy-subrc = 0.
-      lv_tplnr = ls_key_data-value.
-      SELECT SINGLE * FROM iflotx INTO CORRESPONDING FIELDS OF ls_entityset WHERE tplnr = lv_tplnr AND spras = sy-langu.
-    ENDIF.
-
-    TRY .
-        CALL METHOD io_response->set_busi_data
-          EXPORTING
-            is_busi_data = lt_test." ls_entityset.
-
-        ls_done-select = 'X'.
-        CALL METHOD io_response->set_is_done
-          EXPORTING
-            is_todo_list = ls_done.
-
-      CATCH /iwbep/cx_gateway.
-
-        "Fehler
-
-    ENDTRY.
-  ENDMETHOD.
-  
-  
-  
-    METHOD list_tplnrset_read_list.
-**TRY.
-*CALL METHOD SUPER->LIST_TPLNRSET_READ_LIST
+*CALL METHOD SUPER->LIST_ITEMS_READ_LIST
 *  EXPORTING
 *    IO_REQUEST  =
 *    IO_RESPONSE =
@@ -69,45 +9,132 @@
 **ENDTRY.
 
     TYPES: BEGIN OF my_entityset,
-             tplnr  TYPE string,
-             pltxt  TYPE string,
-             status TYPE string,
-             tplma  TYPE string,
+             item_number TYPE string,
+             superior    TYPE string,
+             text        TYPE string,
+             type        TYPE string,
+             posnr       TYPE string,
+             rbnr        TYPE string,
            END OF my_entityset.
 
 
-    DATA: ls_entityset TYPE my_entityset,
-          et_entityset TYPE TABLE OF my_entityset,
-          ls_done      TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list,
-          lv_demo      TYPE xfeld,
-          lv_where     TYPE /afm/cafm_demo-funloc_list_where.
+    DATA: lt_entityset    TYPE TABLE OF my_entityset,
+          ls_done         TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list,
+          lv_demo         TYPE xfeld,
+          lv_funloc_where TYPE /afm/cafm_demo-funloc_list_where,
+          lt_sup          TYPE TABLE OF my_entityset,
+          ls_sup          TYPE          my_entityset,
+          ls_pl           TYPE /afm/cafm_pl_c.
 
-    "Für Demos:
-    CLEAR: lv_demo, lv_where.
-    SELECT SINGLE demo_active funloc_list_where FROM /afm/cafm_demo INTO ( lv_demo, lv_where ).
+    FIELD-SYMBOLS: <fs_sup> TYPE my_entityset.
 
-    IF lv_demo IS INITIAL
-      OR lv_where IS INITIAL.
-      SELECT  i~*, x~pltxt FROM iflot AS i
-        INNER JOIN iflotx AS x
-        ON i~tplnr = x~tplnr
-        INTO CORRESPONDING FIELDS OF TABLE @et_entityset
-        WHERE x~spras = @sy-langu.
-      "AND ( tplma LIKE '4000%' ) OR ( i~tplnr = '00001-GE003' OR i~tplnr = '000001-GE003' ).
-    ELSE.
-      "Beschaffe die Vorauswahl
-      SELECT  i~*, x~pltxt FROM iflot AS i
-        INNER JOIN iflotx AS x
-        ON i~tplnr = x~tplnr
-        INTO CORRESPONDING FIELDS OF TABLE @et_entityset
-        WHERE x~spras = @sy-langu
-        AND (lv_where).
+
+*****
+* Extra für Demos
+*****
+
+    "1) User Daten fest setzen:
+    IF sy-uname = 'SCHOEN' AND sy-langu = 'E'.
+      sy-langu = 'D'.
+    ENDIF.
+    "2) Demo Einschränkung selektieren:
+    CLEAR: lv_demo, lv_funloc_where.
+    SELECT SINGLE demo_active funloc_list_where FROM /afm/cafm_demo INTO ( lv_demo, lv_funloc_where ).
+    IF lv_demo IS INITIAL.
+      CLEAR: lv_funloc_where.
     ENDIF.
 
+
+*****
+* Preload beachten
+*****
+    CLEAR: ls_pl, lt_sup.
+    SELECT SINGLE * FROM /afm/cafm_pl_c INTO ls_pl WHERE uname = sy-uname.
+    IF sy-subrc <> 0.
+      SELECT SINGLE * FROM /afm/cafm_pl_c INTO ls_pl WHERE uname = '*'.
+    ENDIF.
+
+    IF ls_pl-pre_tplnr IS NOT INITIAL.
+      SELECT i~tplnr, i~tplma, x~pltxt, 'T', i~posnr, i~rbnr
+      FROM iflot AS i
+      INNER JOIN iflotx AS x
+      ON i~tplnr = x~tplnr
+          INTO TABLE @lt_sup
+          WHERE tplma = @ls_pl-pre_tplnr.
+      IF ls_pl-no_drop_down IS NOT INITIAL.
+        SELECT i~tplnr, i~tplma, x~pltxt, 'T', i~posnr, i~rbnr
+        FROM iflot AS i
+        INNER JOIN iflotx AS x
+        ON i~tplnr = x~tplnr
+            APPENDING TABLE @lt_sup
+            WHERE i~tplnr = @ls_pl-pre_tplnr.
+      ENDIF.
+    ENDIF.
+
+*****
+* Technische Plätze beschaffen
+*****
+    REFRESH: gt_tplnr.
+    SELECT i~tplnr, i~tplma, x~pltxt, 'T', i~posnr, i~rbnr
+      FROM iflot AS i
+      INNER JOIN iflotx AS x
+      ON i~tplnr = x~tplnr
+      INTO TABLE @gt_tplnr
+      WHERE x~spras = @sy-langu
+      AND (lv_funloc_where).
+
+*****
+* Equipments beschaffen
+*****
+    REFRESH: gt_equi.
+    SELECT e~equnr, i~tplnr, t~eqktx, 'E', '999', e~rbnr
+      FROM equz AS e
+      INNER JOIN eqkt AS t
+      ON e~equnr = t~equnr
+      INNER JOIN iloa AS i
+      ON i~iloan = e~iloan
+      INTO TABLE @gt_equi
+      WHERE t~spras = @sy-langu
+      AND   e~datbi = '99991231'
+      AND   (lv_funloc_where).
+
+*****
+* Daten aufbereiten
+*****
+    IF    ls_pl-pre_tplnr IS NOT INITIAL
+      AND lt_sup          IS NOT INITIAL
+      AND lv_demo         IS     INITIAL.
+
+      "Wenn Preload genutzt wird, Daten entsprechend auf die gewünschten reduzieren:
+      REFRESH: gt_items_read.
+
+      SORT lt_sup.
+      APPEND LINES OF lt_sup TO lt_entityset.
+
+      LOOP AT lt_sup ASSIGNING <fs_sup>.
+
+        me->recursive_read( <fs_sup>-item_number ).
+
+      ENDLOOP.
+
+      APPEND LINES OF gt_items_read TO lt_entityset.
+    ELSE.
+      "Wenn kein Preload gewünscht oder Daten per Deom eingeschränkt wurden, Daten direkt zurück geben:
+      APPEND LINES OF gt_tplnr TO lt_entityset.
+      APPEND LINES OF gt_equi  TO lt_entityset.
+    ENDIF.
+
+    SORT lt_entityset.
+    DELETE ADJACENT DUPLICATES FROM lt_entityset.
+    SORT lt_entityset by posnr item_number.
+
+*****
+* Daten an den Aufrufer zurück übergeben
+*****
     TRY .
         CALL METHOD io_response->set_busi_data
           EXPORTING
-            it_busi_data = et_entityset.
+            it_busi_data = lt_entityset.
 
         ls_done-select = 'X'.
         CALL METHOD io_response->set_is_done
@@ -116,7 +143,6 @@
 
       CATCH /iwbep/cx_gateway.
 
-        BREAK klappstein.
 
     ENDTRY.
 
