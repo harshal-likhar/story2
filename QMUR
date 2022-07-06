@@ -1,0 +1,106 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPM_QMUR_FENUM_01                                           *
+*&                                                                     *
+*&---------------------------------------------------------------------*
+*& correct notification causes with FENUM = 0000                       *
+*& --> delete record and insert a new one with correct new FENUM       *
+*&     new FENUM = P_FEN_N                                             *
+*&     new URNUM = highest URNUM of the new FENUM + 1                  *
+*&---------------------------------------------------------------------*
+
+REPORT  ZPM_QMUR_FENUM_01.
+
+tables : QMFE,qmur.
+
+SELECT-OPTIONS : S_QMNUM FOR QMFE-QMNUM.
+
+parameters :  p_testl(1)  type C default 'X',
+              p_fen_N     like qmfe-fenum default '0000' obligatory,
+              p_fen_o     like qmfe-fenum default '0000' no-display.
+
+DATA : GT_QMUR like qmur OCCURS 0 with header line.
+
+DATA : BEGIN OF GT_URNUM OCCURS 0,
+         URNUM LIKE QMUR-URNUM,
+       END OF GT_URNUM.
+
+data :gv_urnum_high     like qmur-urnum,
+      gv_qmfe_exist(1)  type c,
+      gv_qmnum_old      like qmfe-qmnum.
+
+SELECT * FROM QMUR INTO table gt_qmur
+                  WHERE QMNUM IN S_QMNUM
+                    AND FENUM =  p_fen_o.
+
+if gt_qmur[] is initial.
+  write : / 'No item causes for item', p_fen_o.
+  stop.
+endif.
+
+if p_testl <> ' '.
+  write : / 'test mode'.
+else.
+  write : / 'update mode'.
+endif.
+
+loop at gt_qmur.
+  if gv_qmnum_old <> gt_qmur-qmnum.
+    gv_qmnum_old = gt_qmur-qmnum.
+    clear gv_qmfe_exist.
+    refresh gt_urnum.
+    clear   gt_urnum.
+    select urnum from qmur into corresponding fields of table gt_urnum
+                          where qmnum = gt_qmur-qmnum
+                            and fenum = p_fen_n.
+    clear gv_urnum_high.
+    loop at gt_urnum.
+      if gt_urnum-urnum > gv_urnum_high.
+        gv_urnum_high = gt_urnum-urnum.
+        gv_qmfe_exist = 'X'.
+      endif.
+    endloop.
+    if gv_qmfe_exist is initial.
+      select single * from qmfe where qmnum = gt_qmur-qmnum
+                                  and fenum = p_fen_n.
+      if sy-subrc = 0.
+        gv_qmfe_exist = 'X'.
+      else.
+        write : / 'item', p_fen_n, 'do not exist for notification',
+                  gt_qmur-qmnum.
+      endif.
+    endif.
+  endif.
+  if gv_qmfe_exist is initial.
+    continue.
+  endif.
+
+  if p_testl = ' '.
+    delete from qmur where qmnum = gt_qmur-qmnum
+                       and fenum = gt_qmur-fenum
+                       and urnum = gt_qmur-urnum.
+    if sy-subrc = 0.
+      clear qmur.
+      qmur = gt_qmur.
+      gv_urnum_high = gv_urnum_high + 1.
+      qmur-fenum = p_fen_n.
+      qmur-urnum = gv_urnum_high.
+      insert qmur.
+      if sy-subrc = 0.
+        write : / 'update cause',gt_qmur-qmnum,gt_qmur-fenum,
+                   gt_qmur-urnum,
+                  'new cause number',qmur-fenum,qmur-urnum.
+      else.
+        write : / 'error insert',gt_qmur-qmnum,gt_qmur-fenum,
+                   gt_qmur-urnum,
+                   qmur-qmnum, qmur-fenum, qmur-urnum.
+      endif.
+    else.
+      write : / 'error delete',gt_qmur-qmnum,gt_qmur-fenum,
+                gt_qmur-urnum.
+    endif.
+  else.
+    gv_urnum_high = gv_urnum_high + 1.
+    write : / 'update cause',gt_qmur-qmnum,gt_qmur-fenum,gt_qmur-urnum,
+              'new cause number',p_fen_n,gv_urnum_high.
+  endif.
+endloop.
