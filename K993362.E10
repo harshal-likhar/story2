@@ -1,0 +1,7 @@
+KLAPPSTEIN   K T10        1   0   0   0   0   1   0   0   0   1  750   .  0   0   0   0   0 500
+#A
+#/1/                          A   G   D   C   R   7   T   -   Z RELE EX.  _   _   _   _   _ CLI
+E10 f 0000 20210301110604 BGSAP02 APServiceE10
+E10 e 0000 20210301110617 BGSAP02 APServiceE10
+T10 < 0000 20210301110622 BGSAP02 APServiceE10
+E10 E 0000 20210301110622 BGSAP02 APServiceE10
