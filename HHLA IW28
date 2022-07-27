@@ -1,0 +1,42 @@
+		
+		
+		
+		
+		
+		
+		
+		
+
+Nre fields in Transaction IW28
+ 
+Display the notification custom fields into the notification list, Transaction code IW28.
+For this purpose we have created the append structure in the structure RIHQMEL_LIST.
+Transaction code SE11 is used. The append structure name is ZPM_GWL_QMEL and in this structure we have added the following fields.
+ZZ_PM_EBELN	/HHLA/PM_EBELN	Bestellnummer
+ZZ_PM_EBELP	EBELP	Positionsnummer des Einkaufsbelegs
+ZZ_PM_GEWBEGINN	/HHLA/PM_GEWBEGINN	Gewährleistung Beginn
+ZZ_PM_GEWENDE	/HHLA/PM_GEWENDE	Gewährleistung Ende
+ZZ_PM_GEWEUROBETRAG	/HHLA/PM_GEWEUROBETRAG	Gewährleistung Betrag
+ZZ_PM_GEWBETRAG_CURR	/HHLA/PM_GEWBETRAG_CURR	Währungsschlüssel
+ZZ_PM_GEWBESTELLSUM	/HHLA/PM_GEWBESTELLSUM	Bestellungsbetrag
+ZZ_PM_GEWBESTELLCURR	/HHLA/PM_GEWBESTELLCURR	Währung für die Bestellsumme
+ZZ_PM_QMNUM	/HHLA/PM_QMNUM	Meldungsnummer
+ZZ_PM_GEWMELDNUMMER	/HHLA/PM_GEWMELDNUMMER	Gewährleistung Meldung Nummer
+ZZ_PM_STOERMELDNUMMER	/HHLA/PM_STOERMELDNUMMER	Störmeldungsmeldung ID Nummer
+ZZ_PM_GEWPROZENT	/HHLA/PM_GEWPROZENT	Gewäheleistungsbetrag Prozentpunkte
+ZZ_PM_MAENGELMELDNUMMER	/HHLA/PM_MAENGELMELDNUMMER	Mängelmeldungsnr. ID Nummer
+ZZ_PM_1FRERSTELLDAT	/HHLA/PM_1FRERSTELLDAT	1FR Maßnahme Erstelldatum
+ZZ_PM_FLTXTSTUFE1	/HHLA/PM_FLTXTSTUFE1	Bezeichnung Object Stufe 1
+ZZ_PM_FLKURZTEXT	/HHLA/PM_FLKURZTEXT	Kurztext
+ZZ_PM_C3MELDNUMMER	/HHLA/PM_C3MELDNUMMER	C3 Meldung ID Nummer
+
+To get the fields into the selection screen we have to implement the implict enhancement
+/HHLA/PM_EI_MELD_SEL_OPT.
+we have 4 lis of enhancement implementation elements:
+\PR:RIQMEL20\EX:RIQMEL20_11\EI   used to set the selection screen fields text
+\PR:RIQMEL20\EX:SEL_MELD_STAND_01\EI  add the Z fields in the select statement where condition
+\PR:RIQMEL20\EX:SEL_MELD_STAND_02\EI  add the Z fields in the select statement where condition
+\PR:RIQMEL20\EX:RIQMEL20_20\EI   add the selection screen fields (SELECT-OPTIONS) 
+ For double click on the Störmeldungsmeldung, Gewährleistung Meldung and Mängelmeldung we have implemented the implict enhancement.
+
+/HHLA/PM_GEW_ID_DOUBLE_CLICK
