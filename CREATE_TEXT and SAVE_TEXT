@@ -86,3 +86,5 @@ IF <fs_ltext_eq>-ltext IS NOT INITIAL.
           IF sy-subrc <> 0.
 * Implement suitable error handling here
           ENDIF.
+      ENDCASE.
+      CLEAR :lv_fname,lv_response,lv_len_re,lv_len,ls_header,lt_lines,lv_str,lv_off,ls_line.
