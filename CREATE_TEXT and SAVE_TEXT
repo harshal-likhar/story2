@@ -1,0 +1,88 @@
+    DATA : ls_line     TYPE tline,
+           lt_lines    TYPE STANDARD TABLE OF tline,
+           lv_response TYPE string,
+           lv_fname    TYPE thead-tdname,
+           ls_header   TYPE thead,
+           lv_str      TYPE tdline,
+           lv_len_re   TYPE i,
+           lv_len      TYPE i,
+           lv_off      TYPE i. 
+IF <fs_ltext_eq>-ltext IS NOT INITIAL.
+*          CONCATENATE lv_aufnr lv_termin INTO lv_fname.
+        lv_fname = <fs_ltext_eq>-equnr.
+        lv_response = <fs_ltext_eq>-ltext.
+        lv_len_re = strlen( <fs_ltext_eq>-ltext ).  "total length
+        lv_len = lv_len_re.
+        lv_len = lv_len / 75 .  "Finding Number of Row’s taken by Long Text
+        IF lv_len_re NE 0 AND lv_len = 0.
+          lv_len = 1.
+        ENDIF.
+        DO lv_len TIMES.
+          MOVE '*' TO ls_line-tdformat.
+          IF lv_len_re < 75.
+            lv_str = lv_response+lv_off(lv_len_re).
+          ELSE.
+            lv_str = lv_response+lv_off(75).
+          ENDIF.
+          ls_line-tdline = lv_str.
+          CLEAR lv_str.
+          SHIFT ls_line-tdline LEFT DELETING LEADING '  '.
+          lv_off = lv_off + 75.
+          lv_len_re = lv_len_re - 75.
+          APPEND ls_line TO lt_lines.
+          CLEAR ls_line.
+        ENDDO.
+      ENDIF.
+      CASE <fs_ltext_eq>-mode.
+
+        WHEN 'I'.
+
+          IF lt_lines IS NOT INITIAL.
+            CALL FUNCTION 'CREATE_TEXT'
+              EXPORTING
+                fid       = 'LTXT'
+                flanguage = sy-langu
+                fname     = lv_fname
+                fobject   = 'EQUI'
+*               SAVE_DIRECT       = 'X'
+*               FFORMAT   = '*'
+              TABLES
+                flines    = lt_lines
+              EXCEPTIONS
+                no_init   = 1
+                no_save   = 2
+                OTHERS    = 3.
+            IF sy-subrc = 0.
+* Implement suitable error handling here
+            ENDIF.
+          ENDIF.
+
+        WHEN 'U'.
+
+          ls_header-tdobject = 'EQUI'.
+          ls_header-tdname   = lv_fname .
+          ls_header-tdid     = 'LTXT'.
+          ls_header-tdspras  = 'D'.
+          CALL FUNCTION 'SAVE_TEXT'
+            EXPORTING
+             CLIENT   = SY-MANDT
+              header   = ls_header
+*             INSERT   = ' '
+             SAVEMODE_DIRECT         = 'X'
+*             OWNER_SPECIFIED         = ' '
+*             LOCAL_CAT               = ' '
+             KEEP_LAST_CHANGED       = 'X'
+*         IMPORTING
+*             FUNCTION =
+*             NEWHEADER               =
+            TABLES
+              lines    = lt_lines
+            EXCEPTIONS
+              id       = 1
+              language = 2
+              name     = 3
+              object   = 4
+              OTHERS   = 5.
+          IF sy-subrc <> 0.
+* Implement suitable error handling here
+          ENDIF.
